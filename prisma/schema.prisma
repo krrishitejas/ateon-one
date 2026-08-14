@@ -1,0 +1,529 @@
+// ATEON One — Prisma schema (MySQL / Hostinger target)
+// Local dev DB: docker-compose.yml (mysql:8). Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────── Auth / Users ───────────────────────────
+
+model User {
+  id                 String    @id @default(cuid())
+  name               String
+  email              String    @unique
+  passwordHash       String
+  role               String // 'ceo' | 'cfo' | 'coo' | 'cto' | 'chro' | 'legal' | 'manager' | 'employee'
+  department         String
+  designation        String
+  avatar             String
+  phone              String?
+  twoFactorEnabled   Boolean   @default(false)
+  twoFactorSecret    String?
+  notifEmail         Boolean   @default(true)
+  notifPush          Boolean   @default(true)
+  notifLeave         Boolean   @default(true)
+  notifApproval      Boolean   @default(true)
+  notifChat          Boolean   @default(true)
+  displayCompact     Boolean   @default(false)
+  displayAnimations  Boolean   @default(true)
+  sessions           Session[]
+  tasks              Task[]
+  payslips           Payslip[]
+  employee           Employee?
+  chatMembers        ChatMember[]
+  chatMessages       ChatMessage[]
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  token     String   @unique @db.VarChar(512)
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+// ─────────────────────────── HRMS ───────────────────────────
+
+model Department {
+  id        String     @id @default(cuid())
+  name      String     @unique
+  head      String?
+  employees Employee[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model Employee {
+  id            String         @id @default(cuid())
+  name          String
+  email         String         @unique
+  phone         String?
+  designation   String
+  departmentId  String?
+  department    Department?    @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  location      String?
+  joinDate      DateTime       @default(now())
+  status        String         @default("active") // 'active' | 'on-leave' | 'probation' | 'exited'
+  salary        Float?
+  avatar        String         @default("")
+  currentLat    Float?
+  currentLng    Float?
+  currentLocName String?
+  managerId     String?
+  userId        String?        @unique
+  user          User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  attendance    Attendance[]
+  leaveRequests LeaveRequest[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  @@index([departmentId])
+}
+
+model Attendance {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime @db.Date
+  status     String   @default("present") // 'present' | 'absent' | 'leave' | 'wfh' | 'holiday'
+  checkIn    String?
+  checkOut   String?
+  onBreakSince String?
+  breakSeconds Int    @default(0)
+  createdAt  DateTime @default(now())
+
+  @@unique([employeeId, date])
+}
+
+model LeaveRequest {
+  id         String    @id @default(cuid())
+  employeeId String
+  employee   Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  type       String // 'casual' | 'sick' | 'earned' | 'comp-off' | 'unpaid'
+  startDate  DateTime
+  endDate    DateTime
+  days       Float
+  reason     String    @db.Text
+  status     String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  approverId String?
+  decidedAt  DateTime?
+  createdAt  DateTime  @default(now())
+
+  @@index([employeeId])
+}
+
+// ─────────────────────────── Payroll ───────────────────────────
+
+model PayrollRun {
+  id          String    @id @default(cuid())
+  month       String // e.g. 'July 2026'
+  status      String    @default("draft") // 'draft' | 'processing' | 'completed'
+  totalGross  Float     @default(0)
+  totalNet    Float     @default(0)
+  headcount   Int       @default(0)
+  processedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@unique([month])
+}
+
+model Payslip {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   User     @relation(fields: [employeeId], references: [id])
+  month      String
+  basic      Float
+  hra        Float
+  da         Float
+  special    Float
+  pf         Float
+  tax        Float
+  gross      Float
+  deductions Float
+  net        Float
+  createdAt  DateTime @default(now())
+
+  @@index([employeeId])
+}
+
+// ─────────────────────────── Finance ───────────────────────────
+
+model Budget {
+  id         String   @id @default(cuid())
+  department String
+  category   String
+  fiscalYear String // e.g. 'FY26-27'
+  allocated  Float
+  spent      Float    @default(0)
+  status     String   @default("on-track") // 'on-track' | 'at-risk' | 'over-budget'
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+model Expense {
+  id            String   @id @default(cuid())
+  description   String
+  category      String
+  amount        Float
+  currency      String   @default("INR")
+  date          DateTime @default(now())
+  vendor        String?
+  submittedById String?
+  submittedBy   String? // display name snapshot
+  status        String   @default("pending") // 'pending' | 'approved' | 'rejected' | 'reimbursed'
+  receiptUrl    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Invoice {
+  id         String    @id @default(cuid())
+  number     String    @unique
+  clientName String
+  amount     Float
+  currency   String    @default("INR")
+  issueDate  DateTime  @default(now())
+  dueDate    DateTime
+  paidAt     DateTime?
+  status     String    @default("draft") // 'draft' | 'sent' | 'paid' | 'overdue' | 'void'
+  items      Json?
+  notes      String?   @db.Text
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+}
+
+// ─────────────────────────── Marketing ───────────────────────────
+
+model MarketingCampaign {
+  id        String           @id @default(cuid())
+  name      String
+  channel   String // 'search' | 'social' | 'email' | 'events' | 'content' | 'other'
+  objective String?
+  status    String           @default("planned") // 'planned' | 'active' | 'paused' | 'completed'
+  budget    Float            @default(0)
+  startDate DateTime         @default(now())
+  endDate   DateTime?
+  ownerId   String?
+  spends    MarketingSpend[]
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+}
+
+model MarketingSpend {
+  id          String            @id @default(cuid())
+  campaignId  String
+  campaign    MarketingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  date        DateTime          @default(now())
+  amount      Float
+  description String?
+  impressions Int               @default(0)
+  clicks      Int               @default(0)
+  conversions Int               @default(0)
+  createdAt   DateTime          @default(now())
+
+  @@index([campaignId])
+}
+
+// ─────────────────────────── Projects ───────────────────────────
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  description String?  @db.Text
+  status      String   @default("active") // 'planned' | 'active' | 'on-hold' | 'completed'
+  health      String   @default("green") // 'green' | 'amber' | 'red'
+  progress    Int      @default(0)
+  startDate   DateTime @default(now())
+  endDate     DateTime?
+  ownerId     String?
+  attachments Json?    // To store Base64 uploaded files like PDFs
+  tasks       Task[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String   @db.Text
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id], onDelete: SetNull)
+  assigneeId  String
+  assignee    User     @relation(fields: [assigneeId], references: [id])
+  status      String // 'todo' | 'in-progress' | 'review' | 'done'
+  priority    String // 'critical' | 'high' | 'medium' | 'low'
+  dueDate     DateTime
+  tags        String   @default("[]")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([assigneeId])
+  @@index([projectId])
+}
+
+// ─────────────────────────── CRM ───────────────────────────
+
+model Lead {
+  id             String    @id @default(cuid())
+  name           String
+  company        String?
+  email          String?
+  phone          String?
+  source         String? // 'website' | 'referral' | 'event' | 'outbound' | 'other'
+  status         String    @default("new") // 'new' | 'contacted' | 'qualified' | 'proposal' | 'won' | 'lost'
+  estimatedValue Float     @default(0)
+  score          Int       @default(50)
+  industry       String?
+  lastActivity   DateTime?
+  ownerId        String?
+  notes          String?   @db.Text
+  contacts       Contact[]
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  name      String
+  email     String?
+  phone     String?
+  company   String?
+  title     String?
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([leadId])
+}
+
+// ─────────────────────────── Procurement ───────────────────────────
+
+model Vendor {
+  id          String            @id @default(cuid())
+  name        String
+  category    String            @default("general")
+  contact     String?
+  email       String?
+  phone       String?
+  rating      Float             @default(0)
+  totalOrders Int               @default(0)
+  status      String            @default("active") // 'active' | 'inactive' | 'blacklisted'
+  notes       String?           @db.Text
+  requests    PurchaseRequest[]
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+}
+
+model PurchaseRequest {
+  id          String    @id @default(cuid())
+  title       String
+  description String?   @db.Text
+  amount      Float     @default(0)
+  currency    String    @default("INR")
+  urgency     String    @default("normal") // 'low' | 'normal' | 'high' | 'urgent'
+  status      String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  vendorId    String?
+  vendor      Vendor?   @relation(fields: [vendorId], references: [id], onDelete: SetNull)
+  requesterId String?
+  requestedBy String // display-name snapshot
+  decidedBy   String?
+  decidedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([vendorId])
+  @@index([status])
+}
+
+model InventoryItem {
+  id           String   @id @default(cuid())
+  name         String
+  sku          String?  @unique
+  category     String   @default("general")
+  quantity     Int      @default(0)
+  reorderLevel Int      @default(0)
+  unitCost     Float    @default(0)
+  location     String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// ─────────────────────────── CRM (accounts & pipeline) ───────────────────────────
+
+model Account {
+  id            String        @id @default(cuid())
+  name          String
+  industry      String?
+  type          String        @default("prospect") // 'prospect' | 'customer' | 'partner' | 'vendor'
+  website       String?
+  revenue       Float         @default(0)
+  employeeCount Int           @default(0)
+  phone         String?
+  email         String?
+  address       String?       @db.Text
+  ownerId       String?
+  status        String        @default("active") // 'active' | 'inactive' | 'churned'
+  lastActivity  DateTime?
+  opportunities Opportunity[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model Opportunity {
+  id          String    @id @default(cuid())
+  name        String
+  accountId   String?
+  account     Account?  @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  stage       String    @default("prospecting") // prospecting | qualification | proposal | negotiation | closed-won | closed-lost
+  amount      Float     @default(0)
+  probability Int       @default(0)
+  closeDate   DateTime?
+  ownerId     String?
+  type        String    @default("new-business") // 'new-business' | 'existing-business' | 'renewal'
+  source      String?
+  nextStep    String?
+  description String?   @db.Text
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([accountId])
+  @@index([stage])
+}
+
+// ─────────────────────────── Workflow / Ops ───────────────────────────
+
+model Approval {
+  id          String    @id @default(cuid())
+  title       String
+  type        String // 'expense' | 'leave' | 'procurement' | 'budget' | 'other'
+  requestedBy String
+  amount      Float?
+  priority    String    @default("medium")
+  status      String    @default("pending") // 'pending' | 'approved' | 'rejected'
+  currentStep String?
+  decidedBy   String?
+  decidedAt   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  actorId   String?
+  actorName String
+  action    String // e.g. 'user.login', 'employee.create'
+  entity    String
+  entityId  String?
+  details   String?  @db.Text
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model ServiceTicket {
+  id          String    @id @default(cuid())
+  subject     String
+  description String    @db.Text
+  category    String    @default("general") // 'it' | 'hr' | 'facilities' | 'finance' | 'general'
+  priority    String    @default("medium")
+  status      String    @default("open") // 'open' | 'in-progress' | 'resolved' | 'closed'
+  reportedBy  String
+  assignedTo  String?
+  slaDeadline DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model CalendarEvent {
+  id          String   @id @default(cuid())
+  title       String
+  type        String   @default("meeting") // 'meeting' | 'review' | 'deadline' | 'town-hall' | 'holiday'
+  date        DateTime
+  startTime   String?
+  endTime     String?
+  location    String?
+  attendees   Json?
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Document {
+  id           String   @id @default(cuid())
+  name         String
+  category     String   @default("general") // 'legal' | 'hr' | 'finance' | 'general'
+  url          String
+  mimeType     String?
+  size         Int?
+  uploadedById String?
+  createdAt    DateTime @default(now())
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+// ─────────────────────────── Chat & Communication ───────────────────────────
+
+model ChatGroup {
+  id        String       @id @default(cuid())
+  name      String
+  type      String       @default("team") // 'direct' | 'team' | 'department'
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  members   ChatMember[]
+  messages  ChatMessage[]
+}
+
+model ChatMember {
+  id        String    @id @default(cuid())
+  groupId   String
+  group     ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  joinedAt  DateTime  @default(now())
+  lastRead  DateTime  @default(now())
+
+  @@unique([groupId, userId])
+}
+
+model ChatMessage {
+  id        String    @id @default(cuid())
+  groupId   String
+  group     ChatGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  senderId  String
+  sender    User      @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  content   String    @db.Text
+  fileUrl   String?   @db.LongText // For images, audio, video attachments as Base64
+  fileType  String?
+  timestamp DateTime  @default(now())
+  
+  @@index([groupId])
+  @@index([senderId])
+}
+
+// Central JSON store used to migrate the DataContext (mock-data) modules to
+// server persistence incrementally. TODO: retire once every module has
+// first-class tables + actions.
+model AppState {
+  id        String   @id @default(cuid())
+  key       String   @unique // 'ateon_global_state'
+  data      Json
+  updatedAt DateTime @updatedAt
+}

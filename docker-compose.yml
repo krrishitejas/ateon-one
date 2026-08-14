@@ -1,0 +1,52 @@
+services:
+  ateon-one:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_NAME: "ATEON One"
+        NEXT_PUBLIC_APP_URL: "${APP_URL:-http://localhost:3000}"
+    container_name: ateon-one
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - NEXTAUTH_SECRET=${NEXTAUTH_SECRET}
+      - NEXTAUTH_URL=${APP_URL:-http://localhost:3000}
+      - DATABASE_URL=${DATABASE_URL:-mysql://ateon:${MYSQL_PASSWORD:-ateon_local_dev}@db:3306/ateon_one}
+      - SMTP_HOST=${SMTP_HOST}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  db:
+    image: mysql:8
+    container_name: ateon-one-db
+    ports:
+      - "3306:3306"
+    environment:
+      - MYSQL_USER=ateon
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD:-ateon_local_dev}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD:-ateon_local_root}
+      - MYSQL_DATABASE=ateon_one
+    volumes:
+      - ateon-db-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD:-ateon_local_root}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+volumes:
+  ateon-db-data:

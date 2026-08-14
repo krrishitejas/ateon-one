@@ -1,26 +1,269 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: var(--font-geist), system-ui, -apple-system, sans-serif;
+  --font-mono: var(--font-jetbrains), monospace;
+
+  /* ATEON Brand — Clean Light Palette */
+  --color-brand-50: #F9FAFB;
+  --color-brand-100: #F3F4F6;
+  --color-brand-200: #E5E7EB;
+  --color-brand-300: #D1D5DB;
+  --color-brand-400: #9CA3AF;
+  --color-brand-500: #6B7280;
+  --color-brand-600: #4B5563;
+  --color-brand-700: #374151;
+  --color-brand-800: #1F2937;
+  --color-brand-900: #111827;
+  --color-brand-950: #030712;
+
+  /* Functional Colors */
+  --color-accent-green: #059669;
+  --color-accent-amber: #D97706;
+  --color-accent-red: #DC2626;
+  --color-accent-blue: #2563EB;
+  --color-accent-purple: #7C3AED;
+  --color-accent-teal: #0D9488;
+
+  /* Surface System */
+  --color-surface-bg: #F5F5F7;
+  --color-surface-primary: #FFFFFF;
+  --color-surface-secondary: #F9FAFB;
+  --color-surface-tertiary: #F3F4F6;
+  --color-surface-hover: #F3F4F6;
+  --color-surface-active: #E5E7EB;
+
+  /* Text System */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #9CA3AF;
+  --color-text-inverse: #FFFFFF;
+
+  /* Borders */
+  --color-border-default: #E5E7EB;
+  --color-border-subtle: #F3F4F6;
+  --color-border-strong: #D1D5DB;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.10);
+
+  /* Radii */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+  --radius-full: 9999px;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* ── Base Resets ── */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.1) transparent;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.12);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.2);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans);
+  background: var(--color-surface-bg);
+  color: var(--color-text-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
+
+/* ── Focus Styles ── */
+*:focus-visible {
+  outline: 2px solid var(--color-brand-900);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* ── Selection ── */
+::selection {
+  background: rgba(17, 24, 39, 0.12);
+  color: var(--color-text-primary);
+}
+
+/* ── Transitions ── */
+.transition-theme {
+  transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+/* ── Recharts Overrides ── */
+.recharts-default-tooltip {
+  background: var(--color-surface-primary) !important;
+  border: 1px solid var(--color-border-default) !important;
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.recharts-tooltip-label {
+  color: var(--color-text-primary) !important;
+  font-weight: 600 !important;
+}
+
+.recharts-tooltip-item {
+  color: var(--color-text-secondary) !important;
+}
+
+/* ── Animations ── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-in {
+  animation: slideIn 0.3s ease-out forwards;
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* ── Dark Mode ── */
+.dark {
+  --color-surface-bg: #0F1117;
+  --color-surface-primary: #1A1D27;
+  --color-surface-secondary: #21242F;
+  --color-surface-tertiary: #282C38;
+  --color-surface-hover: #2A2E3A;
+  --color-surface-active: #32364A;
+
+  --color-text-primary: #F0F0F5;
+  --color-text-secondary: #A0A4B8;
+  --color-text-muted: #6B7084;
+  --color-text-inverse: #111827;
+
+  --color-border-default: #2A2E3A;
+  --color-border-subtle: #21242F;
+  --color-border-strong: #3A3F50;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.2);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.3);
+  --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.35);
+  --shadow-xl: 0 8px 32px rgba(0, 0, 0, 0.4);
+
+  color-scheme: dark;
+}
+
+.dark body {
+  background: var(--color-surface-bg);
+  color: var(--color-text-primary);
+}
+
+.dark *::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+}
+.dark *::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.dark * {
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+
+.dark ::selection {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--color-text-primary);
+}
+
+.dark *:focus-visible {
+  outline-color: #7C5CFC;
+}
+
+/* Dark overrides for Tailwind utilities */
+.dark .bg-white { background-color: var(--color-surface-primary) !important; }
+.dark .bg-gray-50 { background-color: var(--color-surface-secondary) !important; }
+.dark .bg-gray-100 { background-color: var(--color-surface-tertiary) !important; }
+.dark .bg-gray-900 { background-color: #F0F0F5 !important; }
+.dark .bg-\[rgb\(249\,250\,251\)\] { background-color: var(--color-surface-secondary) !important; }
+
+.dark .text-gray-900 { color: var(--color-text-primary) !important; }
+.dark .text-gray-800 { color: #D4D4E0 !important; }
+.dark .text-gray-700 { color: #B8B8CC !important; }
+.dark .text-gray-600 { color: var(--color-text-secondary) !important; }
+.dark .text-gray-500 { color: var(--color-text-muted) !important; }
+.dark .text-gray-400 { color: #555870 !important; }
+
+.dark .border-gray-200 { border-color: var(--color-border-default) !important; }
+.dark .border-gray-100 { border-color: var(--color-border-subtle) !important; }
+.dark .border-gray-300 { border-color: var(--color-border-strong) !important; }
+
+.dark .divide-gray-100 > :not(:last-child) { border-color: var(--color-border-subtle) !important; }
+.dark .divide-gray-200 > :not(:last-child) { border-color: var(--color-border-default) !important; }
+
+.dark .hover\:bg-gray-50:hover { background-color: var(--color-surface-hover) !important; }
+.dark .hover\:bg-gray-100:hover { background-color: var(--color-surface-active) !important; }
+
+.dark .ring-gray-900 { --tw-ring-color: #F0F0F5 !important; }
+
+.dark .placeholder\:text-gray-500::placeholder { color: var(--color-text-muted) !important; }
+
+/* Sidebar active state in dark */
+.dark .bg-gray-900.text-white { background-color: #F0F0F5 !important; color: #111827 !important; }
+
+/* Soft background overrides */
+.dark .bg-purple-50 { background-color: rgba(124, 92, 252, 0.12) !important; }
+.dark .bg-blue-50 { background-color: rgba(59, 130, 246, 0.12) !important; }
+.dark .bg-emerald-50 { background-color: rgba(16, 185, 129, 0.12) !important; }
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12) !important; }
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.12) !important; }
+.dark .bg-orange-50 { background-color: rgba(249, 115, 22, 0.12) !important; }
+.dark .bg-teal-50 { background-color: rgba(20, 184, 166, 0.12) !important; }
+
+.dark .bg-red-50.border-red-100 { border-color: rgba(239, 68, 68, 0.2) !important; }
+
+/* Chart tooltip overrides */
+.dark .recharts-default-tooltip {
+  background: var(--color-surface-primary) !important;
+  border-color: var(--color-border-default) !important;
+}
+.dark .recharts-tooltip-label {
+  color: var(--color-text-primary) !important;
+}
+.dark .recharts-tooltip-item {
+  color: var(--color-text-secondary) !important;
+}
+.dark .recharts-cartesian-grid line {
+  stroke: var(--color-border-subtle) !important;
+}
+
+/* Smooth transition for theme switch */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+

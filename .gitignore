@@ -39,3 +39,17 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# env template IS committed (placeholders only)
+!.env.example
+
+# deploy artifacts (may contain env files)
+/ateon-one-deploy/
+/ateon-one-deploy.zip
+
+# deployment archives (large, regenerated on demand)
+*.zip
+
+# scratch / one-off maintenance scripts
+page_tsx_b64.txt
+tsconfig.tsbuildinfo
