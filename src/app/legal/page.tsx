@@ -5,7 +5,8 @@ import { motion } from 'framer-motion';
 import Button from '@/components/ui/Button';
 import Card from '@/components/ui/Card';
 import { FormField, inputClass, selectClass } from '@/components/ui/Modal';
-import { FileText, Printer, Download, Eye, ArrowLeft } from 'lucide-react';
+import { FileText, Printer, Download, Eye, ArrowLeft, Scale, FilePlus2 } from 'lucide-react';
+import ContractRegistry from '@/components/legal/ContractRegistry';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -134,6 +135,7 @@ Name: ${data.partyTwo || '[Founder 2 Name]'}
 };
 
 export default function LegalPage() {
+  const [tab, setTab] = useState<'contracts' | 'templates'>('contracts');
   const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null);
   const [formData, setFormData] = useState<any>({});
   
@@ -242,11 +244,31 @@ export default function LegalPage() {
     <motion.div variants={container} initial="hidden" animate="show" className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Legal Documents</h1>
-          <p className="text-gray-500 text-sm mt-1">Generate automated agreements and compliance papers</p>
+          <h1 className="text-2xl font-bold">Legal</h1>
+          <p className="text-gray-500 text-sm mt-1">Contract register and document generation</p>
         </div>
       </div>
 
+      <div className="flex items-center gap-1 bg-white border border-gray-200 rounded-xl p-1 w-fit">
+        {([
+          { id: 'contracts' as const, label: 'Contracts', icon: <Scale size={14} /> },
+          { id: 'templates' as const, label: 'Generate Documents', icon: <FilePlus2 size={14} /> },
+        ]).map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all cursor-pointer ${
+              tab === t.id ? 'bg-gray-100 text-gray-900' : 'text-gray-500 hover:text-gray-600'
+            }`}
+          >
+            {t.icon}{t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'contracts' && <ContractRegistry />}
+
+      {tab === 'templates' && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {Object.values(TEMPLATES).map(temp => (
           <motion.div key={temp.id} variants={item}>
@@ -264,6 +286,7 @@ export default function LegalPage() {
           </motion.div>
         ))}
       </div>
+      )}
     </motion.div>
   );
 }

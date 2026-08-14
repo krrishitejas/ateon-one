@@ -418,6 +418,42 @@ model Approval {
   updatedAt   DateTime  @updatedAt
 }
 
+model ApprovalStep {
+  id         String    @id @default(cuid())
+  approvalId String
+  approval   Approval  @relation(fields: [approvalId], references: [id], onDelete: Cascade)
+  sequence   Int // 0-based position in the chain
+  role       String // role key expected to sign off at this step
+  status     String    @default("waiting") // 'waiting' | 'pending' | 'approved' | 'rejected'
+  decidedBy  String?
+  decidedAt  DateTime?
+  comment    String?   @db.Text
+  createdAt  DateTime  @default(now())
+
+  @@index([approvalId])
+}
+
+model Contract {
+  id            String    @id @default(cuid())
+  title         String
+  type          String    @default("service") // 'nda' | 'service' | 'employment' | 'vendor' | 'license'
+  party         String
+  startDate     DateTime
+  endDate       DateTime?
+  status        String    @default("draft") // 'draft' | 'review' | 'active' | 'expired' | 'terminated'
+  value         Float?
+  currency      String    @default("INR")
+  ownerId       String?
+  signatories   String?   @db.Text // JSON array of names
+  renewalNotice Int       @default(30) // days before endDate to flag renewal
+  notes         String?   @db.Text
+  documentUrl   String?   @db.LongText
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([status])
+}
+
 model AuditLog {
   id        String   @id @default(cuid())
   actorId   String?

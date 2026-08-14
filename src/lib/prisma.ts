@@ -536,6 +536,41 @@ async function ensureSchemaInit() {
           PRIMARY KEY (\`id\`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
 
+        await rawPoolQuery(`CREATE TABLE IF NOT EXISTS \`ApprovalStep\` (
+          \`id\` VARCHAR(191) NOT NULL,
+          \`approvalId\` VARCHAR(191) NOT NULL,
+          \`sequence\` INT NOT NULL DEFAULT 0,
+          \`role\` VARCHAR(191) NOT NULL,
+          \`status\` VARCHAR(191) NOT NULL DEFAULT 'waiting',
+          \`decidedBy\` VARCHAR(191) NULL,
+          \`decidedAt\` DATETIME NULL,
+          \`comment\` TEXT NULL,
+          \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          INDEX \`ApprovalStep_approvalId_idx\` (\`approvalId\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+
+        await rawPoolQuery(`CREATE TABLE IF NOT EXISTS \`Contract\` (
+          \`id\` VARCHAR(191) NOT NULL,
+          \`title\` VARCHAR(191) NOT NULL,
+          \`type\` VARCHAR(191) NOT NULL DEFAULT 'service',
+          \`party\` VARCHAR(191) NOT NULL,
+          \`startDate\` DATETIME NOT NULL,
+          \`endDate\` DATETIME NULL,
+          \`status\` VARCHAR(191) NOT NULL DEFAULT 'draft',
+          \`value\` DOUBLE NULL,
+          \`currency\` VARCHAR(191) NOT NULL DEFAULT 'INR',
+          \`ownerId\` VARCHAR(191) NULL,
+          \`signatories\` TEXT NULL,
+          \`renewalNotice\` INT NOT NULL DEFAULT 30,
+          \`notes\` TEXT NULL,
+          \`documentUrl\` LONGTEXT NULL,
+          \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          \`updatedAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          INDEX \`Contract_status_idx\` (\`status\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+
         await rawPoolQuery(`CREATE TABLE IF NOT EXISTS \`AuditLog\` (
           \`id\` VARCHAR(191) NOT NULL,
           \`actorId\` VARCHAR(191) NULL,
@@ -1242,7 +1277,18 @@ class MySqlDb {
   marketingSpend = createDelegate('MarketingSpend');
   project = createDelegate('Project');
   task = createDelegate('Task');
-  approval = createDelegate('Approval');
+  approval = createDelegate('Approval', {
+    _handleInclude: async (rows: any[], include: any) => {
+      if (include && include.steps) {
+        for (const a of rows) {
+          const [sRows] = await pool.query<any[]>('SELECT * FROM ApprovalStep WHERE approvalId = ? ORDER BY sequence ASC', [a.id]);
+          a.steps = sRows;
+        }
+      }
+    },
+  });
+  approvalStep = createDelegate('ApprovalStep');
+  contract = createDelegate('Contract');
   serviceTicket = createDelegate('ServiceTicket');
   calendarEvent = createDelegate('CalendarEvent');
   auditLog = createDelegate('AuditLog');

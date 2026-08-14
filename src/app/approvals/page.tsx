@@ -10,7 +10,8 @@ import Button from '@/components/ui/Button';
 import Modal, { FormField, inputClass, selectClass } from '@/components/ui/Modal';
 import { formatINR } from '@/data/mockData';
 import { listApprovals, createApproval, setApprovalStatus, getApprovalSummary } from '@/actions/approvals';
-import { CheckCircle2, XCircle, Plus, CheckSquare, AlertCircle } from 'lucide-react';
+import { useAuth } from '@/context/AuthContext';
+import { CheckCircle2, XCircle, Plus, CheckSquare, AlertCircle, Clock, ChevronRight } from 'lucide-react';
 
 const container = { hidden: { opacity: 0 }, show: { opacity: 1, transition: { staggerChildren: 0.05 } } };
 const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0 } };
@@ -26,6 +27,7 @@ const typeIcons: Record<string, string> = {
 const APPROVAL_TYPES = ['expense', 'leave', 'procurement', 'budget', 'other'];
 
 export default function ApprovalsPage() {
+  const { user } = useAuth();
   const [filter, setFilter] = useState<'all' | 'pending' | 'approved' | 'rejected'>('all');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
@@ -161,10 +163,56 @@ export default function ApprovalsPage() {
                 </div>
               </div>
 
+              {/* Sign-off chain */}
+              {approval.steps?.length > 0 && (
+                <div className="bg-gray-50 rounded-xl p-4">
+                  <p className="text-xs font-semibold text-gray-500 mb-3">Approval workflow</p>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {approval.steps.map((step: any, i: number) => (
+                      <React.Fragment key={step.id}>
+                        <div
+                          className={`flex items-center gap-2 px-3 py-1.5 rounded-lg border ${
+                            step.status === 'approved' ? 'bg-emerald-50 border-emerald-200'
+                            : step.status === 'pending' ? 'bg-amber-50 border-amber-200'
+                            : step.status === 'rejected' ? 'bg-red-50 border-red-200'
+                            : 'bg-white border-gray-200'
+                          }`}
+                          title={step.decidedBy ? `${step.status} by ${step.decidedBy}` : step.status}
+                        >
+                          {step.status === 'approved' && <CheckCircle2 size={14} className="text-emerald-600" />}
+                          {step.status === 'pending' && <Clock size={14} className="text-amber-600" />}
+                          {step.status === 'rejected' && <XCircle size={14} className="text-red-500" />}
+                          {step.status === 'waiting' && <Clock size={14} className="text-gray-400" />}
+                          <span className="text-xs font-medium uppercase">{step.role}</span>
+                          {step.decidedBy && (
+                            <span className="text-[10px] text-gray-500">· {step.decidedBy}</span>
+                          )}
+                        </div>
+                        {i < approval.steps.length - 1 && <ChevronRight size={14} className="text-gray-400" />}
+                      </React.Fragment>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {approval.status === 'pending' && summary?.canApprove && (
                 <div className="flex items-center gap-2 pt-2">
-                  <Button variant="success" size="sm" icon={<CheckCircle2 size={14} />} onClick={() => decide(approval.id, 'approved')}>Approve</Button>
-                  <Button variant="danger" size="sm" icon={<XCircle size={14} />} onClick={() => decide(approval.id, 'rejected')}>Reject</Button>
+                  {approval.canActNow ? (
+                    <>
+                      <Button variant="success" size="sm" icon={<CheckCircle2 size={14} />} onClick={() => decide(approval.id, 'approved')}>
+                        {approval.activeStep ? `Approve as ${approval.activeStep.role.toUpperCase()}` : 'Approve'}
+                      </Button>
+                      <Button variant="danger" size="sm" icon={<XCircle size={14} />} onClick={() => decide(approval.id, 'rejected')}>Reject</Button>
+                    </>
+                  ) : (
+                    <p className="text-xs text-gray-500">
+                      {approval.requestedBy === user?.name
+                        ? 'This is your own request.'
+                        : approval.activeStep
+                          ? `Awaiting ${approval.activeStep.role.toUpperCase()} sign-off.`
+                          : 'Awaiting another approver.'}
+                    </p>
+                  )}
                 </div>
               )}
             </Card>
