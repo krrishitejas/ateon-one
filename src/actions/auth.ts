@@ -29,26 +29,104 @@ async function getModulesForRole(roleKey: string): Promise<string[]> {
 }
 
 /**
- * Mail transport, built per-call so a missing SMTP_HOST is reported clearly
+ * Resolve mail settings: environment first, then the Setting table.
+ *
+ * The DB fallback exists because hosting panels are an awkward place to manage
+ * credentials — a single mistyped or cleared field silently breaks login for
+ * everyone with 2FA, with no way to fix it from inside the app. Storing them in
+ * the database keeps them editable by an admin who is already trusted with far
+ * more than an SMTP password.
+ */
+async function getMailConfig() {
+  const fromEnv = {
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASSWORD,
+  };
+
+  // Only consult the database for values the environment doesn't supply.
+  const needsDb = !fromEnv.host || !fromEnv.user || !fromEnv.pass;
+  let fromDb: Record<string, string> = {};
+  if (needsDb) {
+    try {
+      const rows = await prisma.setting.findMany({
+        where: { key: { in: ['smtp_host', 'smtp_port', 'smtp_user', 'smtp_password'] } },
+      });
+      for (const row of rows) fromDb[row.key] = row.value;
+    } catch {
+      // Settings unavailable — fall through with whatever the env provided.
+    }
+  }
+
+  return {
+    host: fromEnv.host || fromDb.smtp_host || '',
+    port: Number(fromEnv.port || fromDb.smtp_port) || 465,
+    user: fromEnv.user || fromDb.smtp_user || '',
+    pass: fromEnv.pass || fromDb.smtp_password || '',
+  };
+}
+
+/**
+ * Mail transport, built per-call so missing settings are reported clearly
  * instead of nodemailer silently defaulting to localhost (which surfaces as a
  * baffling `ECONNREFUSED ::1:465`).
  */
-function getTransporter() {
-  const host = process.env.SMTP_HOST;
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASSWORD;
+async function getTransporter() {
+  const { host, port, user, pass } = await getMailConfig();
   if (!host || !user || !pass) {
     throw new Error(
-      'Email is not configured on this server. Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASSWORD.'
+      'Email is not configured. Set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASSWORD, ' +
+      'or configure them in Settings.'
     );
   }
-  const port = Number(process.env.SMTP_PORT) || 465;
   return nodemailer.createTransport({
     host,
     port,
+    // 465 is implicit TLS; 587 upgrades via STARTTLS.
     secure: port === 465,
     auth: { user, pass },
   });
+}
+
+/** Save mail settings to the database. Admin only. Never returns the password. */
+export async function setSmtpConfig(input: {
+  host: string; port: number; user: string; password?: string;
+}) {
+  const actor = await requireSession();
+  if (!['ceo', 'admin', 'cto'].includes(actor.role)) {
+    throw new Error('Only an administrator can change mail settings');
+  }
+
+  const entries: Array<[string, string]> = [
+    ['smtp_host', input.host.trim()],
+    ['smtp_port', String(input.port || 465)],
+    ['smtp_user', input.user.trim()],
+  ];
+  // Blank password means "leave the stored one alone".
+  if (input.password) entries.push(['smtp_password', input.password]);
+
+  for (const [key, value] of entries) {
+    await prisma.setting.upsert({ where: { key }, update: { value }, create: { key, value } });
+  }
+
+  await logAudit(actor, 'settings.smtp.update', 'Setting', 'smtp', `${input.user}@${input.host}`);
+  return { success: true };
+}
+
+/** Verify the current mail settings actually authenticate. Admin only. */
+export async function verifySmtpConfig() {
+  const actor = await requireSession();
+  if (!['ceo', 'admin', 'cto'].includes(actor.role)) {
+    throw new Error('Only an administrator can test mail settings');
+  }
+  try {
+    const transporter = await getTransporter();
+    await transporter.verify();
+    return { ok: true, message: 'Mail server accepted the credentials.' };
+  } catch (e: any) {
+    return { ok: false, message: e?.message ?? 'Verification failed' };
+  }
 }
 
 export async function login(email: string, password: string, otpCode?: string) {
@@ -74,7 +152,7 @@ export async function login(email: string, password: string, otpCode?: string) {
         });
         
         try {
-          await getTransporter().sendMail({
+          await (await getTransporter()).sendMail({
             from: `"ATEON One Security" <${process.env.SMTP_USER}>`,
             to: user.email,
             subject: 'Your ATEON One Verification Code',
@@ -289,7 +367,7 @@ export async function generateInviteEmail(email: string, role: string, name: str
   // retry fails with "Email already exists".
   let transporter;
   try {
-    transporter = getTransporter();
+    transporter = await getTransporter();
   } catch (e: any) {
     return { error: e.message };
   }
