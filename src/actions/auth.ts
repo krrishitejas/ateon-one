@@ -80,13 +80,17 @@ async function getTransporter() {
       'or configure them in Settings.'
     );
   }
-  return nodemailer.createTransport({
+  const transporter = nodemailer.createTransport({
     host,
     port,
     // 465 is implicit TLS; 587 upgrades via STARTTLS.
     secure: port === 465,
     auth: { user, pass },
   });
+  // The sender must be the authenticated mailbox — most providers reject any
+  // other From address, and reading it from process.env separately is how it
+  // ended up as a literal "<undefined>".
+  return { transporter, from: user };
 }
 
 /** Save mail settings to the database. Admin only. Never returns the password. */
@@ -121,8 +125,8 @@ export async function verifySmtpConfig() {
     throw new Error('Only an administrator can test mail settings');
   }
   try {
-    const transporter = await getTransporter();
-    await transporter.verify();
+    const mail = await getTransporter();
+    await mail.transporter.verify();
     return { ok: true, message: 'Mail server accepted the credentials.' };
   } catch (e: any) {
     return { ok: false, message: e?.message ?? 'Verification failed' };
@@ -152,8 +156,9 @@ export async function login(email: string, password: string, otpCode?: string) {
         });
         
         try {
-          await (await getTransporter()).sendMail({
-            from: `"ATEON One Security" <${process.env.SMTP_USER}>`,
+          const mail = await getTransporter();
+          await mail.transporter.sendMail({
+            from: `"ATEON One Security" <${mail.from}>`,
             to: user.email,
             subject: 'Your ATEON One Verification Code',
             text: `Your login code is: ${generatedOtp}. Do not share this with anyone.`,
@@ -365,9 +370,9 @@ export async function generateInviteEmail(email: string, role: string, name: str
   // Verify mail is usable BEFORE creating the account. Otherwise a send
   // failure leaves an account whose temporary password nobody knows, and the
   // retry fails with "Email already exists".
-  let transporter;
+  let mail;
   try {
-    transporter = await getTransporter();
+    mail = await getTransporter();
   } catch (e: any) {
     return { error: e.message };
   }
@@ -393,8 +398,8 @@ export async function generateInviteEmail(email: string, role: string, name: str
     });
     createdUserId = created?.id ?? null;
 
-    await transporter.sendMail({
-      from: `"ATEON HR" <${process.env.SMTP_USER}>`,
+    await mail.transporter.sendMail({
+      from: `"ATEON HR" <${mail.from}>`,
       to: email,
       subject: 'Welcome to ATEON One',
       text: `Hello ${name},\n\nYou have been invited to ATEON One as a ${role.toUpperCase()}.\nYour temporary password is: ${tempPass}\n\nPlease log in and change your password immediately.`,
