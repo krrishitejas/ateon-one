@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import useSWR from 'swr';
 import { getSetting, setSetting } from '@/actions/settings';
 import { getMyProfile } from '@/actions/hrms';
+import { toggle2FA, regenerate2FABackupCodes, getBackupCodeStatus } from '@/actions/auth';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { useTracking } from '@/hooks/useTracking';
@@ -81,6 +82,55 @@ export default function SettingsPage() {
 
   // Must sit above the `!user` guard — every hook has to run on every render.
   const { data: emp } = useSWR('my_profile', getMyProfile);
+  const { data: backupStatus, mutate: mutateBackup } = useSWR('backup_codes', getBackupCodeStatus);
+
+  // Plaintext codes exist only in memory, only right after generation.
+  const [freshCodes, setFreshCodes] = useState<string[] | null>(null);
+  const [codesBusy, setCodesBusy] = useState(false);
+  const [codesError, setCodesError] = useState('');
+
+  const handleToggle2FA = async () => {
+    setCodesBusy(true); setCodesError(''); setFreshCodes(null);
+    try {
+      const res = await toggle2FA(!user?.twoFactorEnabled);
+      if (res.success) {
+        if (res.codes) setFreshCodes(res.codes);
+        await mutateBackup();
+        refreshAuth();
+      }
+    } catch (e: any) {
+      setCodesError(e?.message ?? 'Could not change two-factor settings');
+    } finally { setCodesBusy(false); }
+  };
+
+  const handleRegenerate = async () => {
+    if (!confirm('Generate new backup codes? Your existing codes stop working immediately.')) return;
+    setCodesBusy(true); setCodesError(''); setFreshCodes(null);
+    try {
+      setFreshCodes(await regenerate2FABackupCodes());
+      await mutateBackup();
+    } catch (e: any) {
+      setCodesError(e?.message ?? 'Could not generate codes');
+    } finally { setCodesBusy(false); }
+  };
+
+  const downloadCodes = () => {
+    if (!freshCodes) return;
+    const body = [
+      'ATEON One — two-factor backup codes',
+      `Account: ${user?.email ?? ''}`,
+      `Generated: ${new Date().toLocaleString('en-IN')}`,
+      '',
+      'Each code works once. Keep them somewhere safe and offline.',
+      '',
+      ...freshCodes.map((c, i) => `${String(i + 1).padStart(2, ' ')}. ${c}`),
+    ].join('\n');
+    const blob = new Blob([body], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'ateon-backup-codes.txt'; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   if (!user) return null;
 
@@ -200,13 +250,66 @@ export default function SettingsPage() {
                         <Badge variant={user?.twoFactorEnabled ? 'success' : 'default'} size="sm">
                           {user?.twoFactorEnabled ? 'Enabled' : 'Disabled'}
                         </Badge>
-                        <Button variant="outline" size="sm" onClick={() => {
-                          import('@/actions/auth').then(a => a.toggle2FA(!user?.twoFactorEnabled).then(res => {
-                            if (res.success) refreshAuth();
-                          }));
-                        }}>Toggle</Button>
+                        <Button variant="outline" size="sm" disabled={codesBusy} onClick={handleToggle2FA}>
+                          {codesBusy ? 'Working…' : 'Toggle'}
+                        </Button>
                       </div>
                     </div>
+
+                    {/* Backup codes */}
+                    {backupStatus?.twoFactorEnabled && (
+                      <div className="mt-4 pt-4 border-t border-gray-200">
+                        <div className="flex items-start justify-between gap-3 flex-wrap">
+                          <div className="min-w-0">
+                            <p className="text-sm font-medium text-gray-900">Backup codes</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Use one instead of the emailed code if you can&apos;t receive email.
+                              {' '}
+                              <span className={backupStatus.remaining === 0 ? 'text-red-600 font-medium' : ''}>
+                                {backupStatus.remaining} of {backupStatus.total} unused
+                              </span>
+                            </p>
+                          </div>
+                          <Button variant="outline" size="sm" disabled={codesBusy} onClick={handleRegenerate}>
+                            {codesBusy ? 'Working…' : 'Generate new codes'}
+                          </Button>
+                        </div>
+
+                        {backupStatus.remaining === 0 && !freshCodes && (
+                          <p className="text-xs text-red-600 mt-2">
+                            No codes left. If email delivery fails you will not be able to sign in — generate a new set now.
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {codesError && (
+                      <p className="text-xs text-red-600 mt-3">{codesError}</p>
+                    )}
+
+                    {/* Shown exactly once */}
+                    {freshCodes && (
+                      <div className="mt-4 p-4 rounded-xl bg-amber-50 border border-amber-200">
+                        <p className="text-sm font-medium text-amber-900">
+                          Save these now — they cannot be shown again
+                        </p>
+                        <p className="text-xs text-amber-800 mt-0.5">
+                          Each code works once. Store them somewhere safe and offline.
+                        </p>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-3">
+                          {freshCodes.map(code => (
+                            <code key={code} className="px-2 py-1.5 bg-white rounded-lg border border-amber-200 text-sm font-mono text-center tracking-wider">
+                              {code}
+                            </code>
+                          ))}
+                        </div>
+                        <div className="flex gap-2 mt-3">
+                          <Button size="sm" variant="secondary" onClick={downloadCodes}>Download</Button>
+                          <Button size="sm" variant="secondary" onClick={() => navigator.clipboard?.writeText(freshCodes.join('\n'))}>Copy</Button>
+                          <Button size="sm" variant="ghost" onClick={() => setFreshCodes(null)}>I&apos;ve saved them</Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                   <div className="p-4 rounded-xl bg-gray-50">
                     <div className="flex items-center justify-between">

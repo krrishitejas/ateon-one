@@ -32,6 +32,7 @@ model User {
   displayCompact     Boolean   @default(false)
   displayAnimations  Boolean   @default(true)
   sessions           Session[]
+  backupCodes        BackupCode[]
   tasks              Task[]
   payslips           Payslip[]
   employee           Employee?
@@ -39,6 +40,21 @@ model User {
   chatMessages       ChatMessage[]
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
+}
+
+/**
+ * Single-use recovery codes for two-factor auth. Stored as bcrypt hashes — the
+ * plaintext is shown to the user exactly once, at generation.
+ */
+model BackupCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
 }
 
 model Session {

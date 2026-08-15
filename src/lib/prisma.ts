@@ -167,6 +167,16 @@ async function ensureSchemaInit() {
           INDEX \`Session_userId_idx\` (\`userId\`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
 
+        await rawPoolQuery(`CREATE TABLE IF NOT EXISTS \`BackupCode\` (
+          \`id\` VARCHAR(191) NOT NULL,
+          \`userId\` VARCHAR(191) NOT NULL,
+          \`codeHash\` VARCHAR(191) NOT NULL,
+          \`usedAt\` DATETIME NULL,
+          \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (\`id\`),
+          INDEX \`BackupCode_userId_idx\` (\`userId\`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+
         await rawPoolQuery(`CREATE TABLE IF NOT EXISTS \`Department\` (
           \`id\` VARCHAR(191) NOT NULL,
           \`name\` VARCHAR(191) NOT NULL,
@@ -1094,6 +1104,8 @@ class MySqlDb {
   }
 
   user = createDelegate('User');
+
+  backupCode = createDelegate('BackupCode');
 
   session = createDelegate('Session', {
     findUnique: async ({ where, include }: any) => {

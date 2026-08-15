@@ -8,6 +8,10 @@ import { prisma } from '@/lib/prisma';
 import { randomBytes } from 'crypto';
 import { getRoleConfig, ROLES, rankOf } from '@/data/roles';
 import { requireSession, logAudit } from '@/lib/auth';
+import {
+  regenerateBackupCodes, consumeBackupCode, countUnusedBackupCodes,
+  normaliseCode, BACKUP_CODE_COUNT,
+} from '@/lib/backupCodes';
 const secret = new TextEncoder().encode(process.env.NEXTAUTH_SECRET || 'dev-secret-key-ateon-one-2024-local');
 
 /** Module list for a role, preferring the DB-defined role over the built-in one. */
@@ -84,14 +88,31 @@ export async function login(email: string, password: string, otpCode?: string) {
 
         return { requireOtp: true };
       } else {
-        if (user.twoFactorSecret !== otpCode) {
-          return { error: 'Invalid verification code' };
+        // A backup code is accepted in place of the emailed OTP, so a mail
+        // outage can't lock someone out permanently.
+        const looksLikeBackupCode = normaliseCode(otpCode).length === 8;
+        let verified = user.twoFactorSecret === otpCode;
+        let usedBackupCode = false;
+
+        if (!verified && looksLikeBackupCode) {
+          verified = await consumeBackupCode(user.id, otpCode);
+          usedBackupCode = verified;
         }
-        // Clear OTP
+
+        if (!verified) return { error: 'Invalid verification code' };
+
         await prisma.user.update({
           where: { id: user.id },
           data: { twoFactorSecret: null }
         });
+
+        if (usedBackupCode) {
+          const remaining = await countUnusedBackupCodes(user.id);
+          await logAudit(
+            { id: user.id, name: user.name, email: user.email, role: user.role, department: user.department, designation: user.designation, avatar: user.avatar },
+            'auth.backup_code.used', 'User', user.id, `${remaining} remaining`
+          );
+        }
       }
     }
 
@@ -179,13 +200,54 @@ export async function changePassword(current: string, newPass: string) {
   return { success: true };
 }
 
+/**
+ * Turn 2FA on or off. Enabling issues a fresh batch of backup codes and
+ * returns them once — they are hashed at rest and can never be shown again.
+ */
 export async function toggle2FA(enabled: boolean) {
   const user = await requireSession();
   await prisma.user.update({
     where: { id: user.id },
     data: { twoFactorEnabled: enabled }
   });
-  return { success: true };
+
+  if (!enabled) {
+    // Codes are meaningless without 2FA, and leaving them behind would let a
+    // future re-enable silently inherit stale ones.
+    await prisma.backupCode.deleteMany({ where: { userId: user.id } });
+    await logAudit(user, 'auth.2fa.disabled', 'User', user.id);
+    return { success: true, codes: null as string[] | null };
+  }
+
+  const codes = await regenerateBackupCodes(user.id);
+  await logAudit(user, 'auth.2fa.enabled', 'User', user.id, `${codes.length} backup codes issued`);
+  return { success: true, codes };
+}
+
+/** Issue a new batch, invalidating any previous codes. Shown once. */
+export async function regenerate2FABackupCodes() {
+  const user = await requireSession();
+
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+  if (!dbUser?.twoFactorEnabled) {
+    throw new Error('Enable two-factor authentication first');
+  }
+
+  const codes = await regenerateBackupCodes(user.id);
+  await logAudit(user, 'auth.backup_codes.regenerated', 'User', user.id, `${codes.length} issued`);
+  return codes;
+}
+
+/** How many codes the signed-in user has left. Never returns the codes. */
+export async function getBackupCodeStatus() {
+  const user = await requireSession();
+  const dbUser = await prisma.user.findUnique({ where: { id: user.id } });
+  const remaining = await countUnusedBackupCodes(user.id);
+  return {
+    twoFactorEnabled: Boolean(dbUser?.twoFactorEnabled),
+    remaining,
+    total: BACKUP_CODE_COUNT,
+  };
 }
 
 export async function generateInviteEmail(email: string, role: string, name: string, phone: string = '') {
