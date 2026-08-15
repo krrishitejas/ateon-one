@@ -211,6 +211,14 @@ export async function login(email: string, password: string, otpCode?: string) {
       .setExpirationTime('24h')
       .sign(secret);
 
+    // Session.token is VARCHAR(1024). MySQL truncates silently by default, and
+    // a truncated token means the cookie never matches the stored row — the
+    // user looks signed in but every server action fails. Fail loudly instead.
+    if (jwt.length > 1024) {
+      console.error(`session token too long (${jwt.length} chars) — refusing to store a truncated value`);
+      return { error: 'Could not create your session. Please contact an administrator.' };
+    }
+
     await prisma.session.create({
       data: {
         userId: user.id,

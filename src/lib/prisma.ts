@@ -159,7 +159,7 @@ async function ensureSchemaInit() {
         await rawPoolQuery(`CREATE TABLE IF NOT EXISTS \`Session\` (
           \`id\` VARCHAR(191) NOT NULL,
           \`userId\` VARCHAR(191) NOT NULL,
-          \`token\` VARCHAR(512) NOT NULL,
+          \`token\` VARCHAR(1024) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,
           \`expiresAt\` DATETIME NOT NULL,
           \`createdAt\` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
           PRIMARY KEY (\`id\`),
@@ -693,6 +693,26 @@ async function ensureSchemaInit() {
           INDEX \`ChatMessage_groupId_idx\` (\`groupId\`),
           INDEX \`ChatMessage_senderId_idx\` (\`senderId\`)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;`);
+
+        // Widen Session.token on databases created before it grew past 512.
+        // MySQL truncates silently by default, which produced sessions whose
+        // stored token no longer matched the cookie — the user appeared logged
+        // in but every server action failed.
+        try {
+          const [tokenCol] = await rawPoolQuery<any[]>(
+            `SELECT CHARACTER_MAXIMUM_LENGTH len FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'Session' AND COLUMN_NAME = 'token'`
+          );
+          if (tokenCol.length > 0 && Number(tokenCol[0].len) < 1024) {
+            await rawPoolQuery(
+              'ALTER TABLE `Session` MODIFY `token` VARCHAR(1024) CHARACTER SET ascii COLLATE ascii_bin NOT NULL'
+            );
+            await rawPoolQuery('DELETE FROM `Session` WHERE LENGTH(token) >= 512');
+            console.log('[schema] widened Session.token and cleared truncated sessions');
+          }
+        } catch (e) {
+          console.error('[schema] Session.token widening failed:', e);
+        }
 
         // ── Column reconciliation ──
         // `CREATE TABLE IF NOT EXISTS` above is a no-op on databases that already
